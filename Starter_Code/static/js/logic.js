@@ -1,110 +1,92 @@
-// Creating the map object
-var myMap = L.map("map", {
-    center: [37.3846664428711, -122.478668212891],
-    zoom: 6
-  });
-  
-// Adding tile for mapbox
-  // Adding the tile layer
-  L.tileLayer('https://a.tiles.mapbox.com/v3/mapbox.world-bright/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a>'
-}).addTo(myMap);
+// Define the GeoJSON data source (all 4.5+ earthquakes in the last 30 days)
+let url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_month.geojson";
 
-  // Adding the tile layer for open street map
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> <a href="https://labs.mapbox.com/contribute/">Improve this map</a>'
-  }).addTo(myMap);
+// Add the street map from Leaflet
+let street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+});
 
-//   // Creating a new marker:
-// // We pass in some initial options, and then add the marker to the map by using the addTo() method.
-// var marker = L.marker([40.7128, -74.0059], {
-//   draggable: true,
-//   title: "My First Marker"
-// }).addTo(myMap);
+// Create map from Leaflet centered on U.S.
+let myMap = L.map("map", {
+    center: [40.58, -103.46],
+    zoom: 3,
+    layers: [street]
+});
 
-// // Binding a popup to our marker
-// marker.bindPopup("Hello There!");
-  
-// Use this link to get the GeoJSON data.
-var link = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson";
-
-function getDepthColor(depth) {
-  return depth > 90 ? '#e03a22' :
-         depth > 70 ? '#f56623' :
-         depth > 50  ? '#f69332' :
-         depth > 30 ? '#efc842' :
-         depth > 10 ? '#d2e34c' :
-                       '#a4d75b';
-}
-
-
-let legend = L.control({ position: "bottomright" });
-
-legend.onAdd = function() {
-    let div = L.DomUtil.create("div", "info legend");
-    let depths = [-10, 10, 30, 50, 70, 90]; // Depth ranges
-    let labels = [];
-
-    // Loop through depth ranges and generate a label with a colored square
-    for (let i = 0; i < depths.length; i++) {
-        div.innerHTML +=
-            '<i style="background:' + getDepthColor(depths[i] + 1) + '"></i> ' +
-            depths[i] + (depths[i + 1] ? '&ndash;' + depths[i + 1] + '<br>' : '+');
+// Create a function to determine the color of the marker based on depth of earthquake
+function myStyle(code) {
+    let color = "black";
+    if (code >= -10 && code <= 10) {
+        color = "chartreuse";
+    } else if (code > 10 && code <= 30) {
+        color = "yellowgreen";
+    } else if (code > 30 && code <= 50) {
+        color = "gold";
+    } else if (code > 50 && code <= 70) {
+        color = "orange";
+    } else if (code > 70 && code <= 90) {
+        color = "darkorange";
+    } else if (code > 90) {
+        color = "red";
     }
-
-    return div;
-};
-
-legend.addTo(myMap);
-
-// Getting our GeoJSON data
-d3.json(link).then(function(data) {
-
-var features = data.features;
-
-// console.log(features.length);
-
-var markers = L.markerClusterGroup();
-
-for(var i = 0; i < features.length; i++) {
-  var location = features[i].geometry.coordinates;
-
-  // console.log(location);
-  // console.log(features[i].properties.title);
-
-      // Check for the location property.
-      if (location) {
-
-        // // Add a new marker to the cluster group, and bind a popup.
-        // markers.addLayer(L.marker([location[1], location[0]])
-        //   // .bindPopup(features[i].properties.title));
-        //   .bindPopup("Magnitude: " + features[i].properties.mag + 
-        //     "<br />Place: : " + features[i].properties.place + 
-        //     "<br />Time: " + new Date(features[i].properties.time).toLocaleString()));
-
-            // Create circle marker options
-        var circleMarkerOptions = {
-          radius: features[i].properties.mag*5, // Size based on the location data
-          fillColor: getDepthColor(location[2]), // Color based on the location data
-          color: "#000", // Border color
-          weight: 1, // Border weight
-          opacity: 0.8, // Border opacity
-          fillOpacity: 0.7 // Fill opacity
-      }
-
-        // Create the circle marker and add it to the map
-      var circleMarker = L.circleMarker([location[1], location[0]], circleMarkerOptions).addTo(myMap);
-
-        // Add a popup to each circle marker
-      circleMarker.bindPopup("Magnitude: " + features[i].properties.mag + 
-            "<br />Place: " + features[i].properties.place + 
-            "<br />Depth: " + location[2] + "km" +
-            "<br />Time: " + new Date(features[i].properties.time).toLocaleString());
-      }
+    return {
+        color: color,
+        fillColor: color
+    };
 }
 
-  // Creating a GeoJSON layer with the retrieved data
-  // L.geoJson(data).addTo(myMap);
+// Create markers
+d3.json(url).then(data => {
+    console.log(data.features);
+    
+    // Extract coordinates and magnitude from features array
+    data.features.forEach(feature => {
+        let coordinates = feature.geometry.coordinates;
+        let magnitude = feature.properties.mag;
 
-  myMap.addLayer(markers);
+        // Call the myStyle feature as a variable determined by the depth
+        let style = myStyle(coordinates[2]);
+
+        // Create circles using magnitude as radius and a fixed color
+        L.circle([coordinates[1], coordinates[0]], {
+            radius: magnitude * 50000, // Adjust the multiplier for visibility
+            color: style.color,
+            fillColor: style.fillColor,
+            fillOpacity: 0.5,
+            weight: 2.0
+        })
+        .addTo(myMap) // Correctly chain addTo
+        .bindPopup(`<h1>Magnitude: ${magnitude}</h1> <hr> Depth: ${coordinates[2]} km<hr>Location: (${coordinates[1]}, ${coordinates[0]})<hr>Learn more <a href="${feature.properties.url}" target="_blank">here</a>`); // Bind popup to the circle
+    });
+
+    // Create legend
+    let legend = L.control({ position: "bottomright" });
+    legend.onAdd = function() {
+        let div = L.DomUtil.create("div", "info legend");
+
+        // Define limits and colors for the legend
+        let limits = [-10, 10, 30, 50, 70, 90, 1000]; // Depth ranges
+        let colors = ["chartreuse", "yellowgreen", "gold", "orange", "darkorange", "red"]; // Corresponding colors
+        let labels = [];
+
+        // Add the minimum and maximum.
+        let legendInfo = "<h4>Depth (km)</h4>" +
+            "<div class=\"labels\">" +
+                "<div class=\"min\">" +`Minimum: `+ limits[0] + "</div>" +
+                "<div class=\"max\">" +`Maximum: `+ limits[limits.length - 1] + "</div>" +
+            "</div>";
+
+        div.innerHTML = legendInfo;
+
+        limits.forEach(function(limit, index) {
+            let rangeText = `${limits[index]} km - ${limits[index+1]} km`;
+            labels.push("<li style=\"background-color:" + colors[index] + "\">" + rangeText + "</li>");
+        });
+
+        div.innerHTML += "<ul>" + labels.join("") + "</ul>";
+        return div;
+    };
+
+    // Adding the legend to the map
+    legend.addTo(myMap);
 });
